@@ -7,7 +7,8 @@ var TAB_NAMES = {
   AUDIT_LOG: 'Audit_Log',
   ERROR_LOG: 'Error_Log',
   SETTINGS: 'Settings',
-  REQUEST_LOG: 'Request_Log'
+  REQUEST_LOG: 'Request_Log',
+  GEMINI_JOBS: 'Gemini_Jobs'
 };
 
 var HEADERS = {};
@@ -38,6 +39,9 @@ HEADERS[TAB_NAMES.SETTINGS] = [
 HEADERS[TAB_NAMES.REQUEST_LOG] = [
   'RequestID', 'RequestType', 'RequestHash', 'Status', 'CorrelationID', 'CreatedAt'
 ];
+HEADERS[TAB_NAMES.GEMINI_JOBS] = [
+  'GeminiJobID', 'OperationName', 'LessonID', 'SourceText', 'Status', 'ResultJSON', 'Error', 'CreatedAt', 'UpdatedAt'
+];
 
 var QUEUE_STATUS = {
   PENDING: 'pending',
@@ -50,7 +54,9 @@ var DEFAULTS = {
   MAX_RETRIES: 5,
   BASE_BACKOFF_SECONDS: 30,
   SLACK_REPLAY_WINDOW_SECONDS: 300,
-  DUPLICATE_CACHE_SECONDS: 600
+  DUPLICATE_CACHE_SECONDS: 600,
+  GEMINI_MODEL: 'gemini-2.0-flash',
+  GEMINI_API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta'
 };
 
 function getRuntimeConfig() {
@@ -58,6 +64,8 @@ function getRuntimeConfig() {
     maxRetries: Number(getSetting('MAX_RETRIES', DEFAULTS.MAX_RETRIES)),
     baseBackoffSeconds: Number(getSetting('BASE_BACKOFF_SECONDS', DEFAULTS.BASE_BACKOFF_SECONDS)),
     replayWindowSeconds: Number(getSetting('SLACK_REPLAY_WINDOW_SECONDS', DEFAULTS.SLACK_REPLAY_WINDOW_SECONDS)),
-    duplicateCacheSeconds: Number(getSetting('DUPLICATE_CACHE_SECONDS', DEFAULTS.DUPLICATE_CACHE_SECONDS))
+    duplicateCacheSeconds: Number(getSetting('DUPLICATE_CACHE_SECONDS', DEFAULTS.DUPLICATE_CACHE_SECONDS)),
+    geminiModel: getSetting('GEMINI_MODEL', DEFAULTS.GEMINI_MODEL),
+    geminiApiBaseUrl: getSetting('GEMINI_API_BASE_URL', DEFAULTS.GEMINI_API_BASE_URL)
   };
 }

@@ -76,14 +76,20 @@ function dispatchQueueJob_(job) {
     case 'NOOP':
       return;
     case 'SEND_PROGRESS_SNAPSHOT':
-      handleSendProgressSnapshotJob_(job, payload);
+      handleSendProgressSnapshotJob_(payload);
+      return;
+    case 'GEMINI_SUBMIT_BRAND_REVIEW':
+      handleGeminiSubmitBrandReview_(payload);
+      return;
+    case 'GEMINI_POLL_OPERATION':
+      handleGeminiPollOperation_(payload);
       return;
     default:
       throw new Error('No queue handler registered for JobType=' + job.JobType);
   }
 }
 
-function handleSendProgressSnapshotJob_(job, payload) {
+function handleSendProgressSnapshotJob_(payload) {
   if (!payload.channel || !payload.text) {
     throw new Error('SEND_PROGRESS_SNAPSHOT missing channel/text');
   }
@@ -91,6 +97,100 @@ function handleSendProgressSnapshotJob_(job, payload) {
   if (!response.ok) {
     throw new Error('Slack API error: ' + (response.error || 'unknown'));
   }
+}
+
+function handleGeminiSubmitBrandReview_(payload) {
+  if (!payload.lessonId || !payload.sourceText) {
+    throw new Error('GEMINI_SUBMIT_BRAND_REVIEW missing lessonId/sourceText');
+  }
+
+  var operation = submitGeminiBatchJob_(payload.lessonId, payload.sourceText);
+  appendRow(TAB_NAMES.GEMINI_JOBS, {
+    GeminiJobID: generateId('GMJ'),
+    OperationName: operation.name,
+    LessonID: payload.lessonId,
+    SourceText: payload.sourceText,
+    Status: 'submitted',
+    ResultJSON: '',
+    Error: '',
+    CreatedAt: nowIso(),
+    UpdatedAt: nowIso()
+  });
+
+  enqueue('GEMINI_POLL_OPERATION', 'gemini_operation', operation.name, {
+    operationName: operation.name,
+    lessonId: payload.lessonId,
+    channel: payload.channel || ''
+  }, {
+    priority: 5,
+    notBefore: new Date(Date.now() + 15000).toISOString()
+  });
+}
+
+function handleGeminiPollOperation_(payload) {
+  if (!payload.operationName || !payload.lessonId) {
+    throw new Error('GEMINI_POLL_OPERATION missing operationName/lessonId');
+  }
+
+  var operationBody = getGeminiOperation_(payload.operationName);
+  if (!operationBody.done) {
+    enqueue('GEMINI_POLL_OPERATION', 'gemini_operation', payload.operationName, payload, {
+      priority: 5,
+      notBefore: new Date(Date.now() + 30000).toISOString()
+    });
+    return;
+  }
+
+  if (operationBody.error) {
+    recordGeminiJobResult_(payload.operationName, 'failed', null, String(operationBody.error));
+    throw new Error('Gemini operation failed: ' + JSON.stringify(operationBody.error));
+  }
+
+  var structured = extractGeminiStructuredResult_(operationBody);
+  var scoreResult = computeBrandComplianceScore(structured.flags || {});
+
+  recordGeminiJobResult_(payload.operationName, 'completed', {
+    structured: structured,
+    score: scoreResult
+  }, '');
+
+  logAudit('gemini_brand_review_completed', 'system', 'queue', 'lesson', payload.lessonId, {
+    operationName: payload.operationName,
+    score: scoreResult.score,
+    deductions: scoreResult.deductions
+  }, payload.operationName);
+
+  if (payload.channel) {
+    enqueue('SEND_PROGRESS_SNAPSHOT', 'channel', payload.channel, {
+      channel: payload.channel,
+      text: 'Brand review complete for lesson `' + payload.lessonId + '`\nScore: *' + scoreResult.score + '*\nDeductions: ' + (scoreResult.deductions.join(', ') || 'none')
+    }, { priority: 6 });
+  }
+}
+
+function recordGeminiJobResult_(operationName, status, resultObj, errorText) {
+  var rows = findRows(TAB_NAMES.GEMINI_JOBS, { OperationName: operationName });
+  if (!rows.length) {
+    appendRow(TAB_NAMES.GEMINI_JOBS, {
+      GeminiJobID: generateId('GMJ'),
+      OperationName: operationName,
+      LessonID: '',
+      SourceText: '',
+      Status: status,
+      ResultJSON: resultObj ? JSON.stringify(resultObj) : '',
+      Error: errorText || '',
+      CreatedAt: nowIso(),
+      UpdatedAt: nowIso()
+    });
+    return;
+  }
+
+  updateRowById(TAB_NAMES.GEMINI_JOBS, 'GeminiJobID', rows[0].GeminiJobID, {
+    Status: status,
+    ResultJSON: resultObj ? JSON.stringify(resultObj) : '',
+    Error: errorText || '',
+    UpdatedAt: nowIso()
+  });
 }
 
 function handleQueueFailure_(job, err) {
