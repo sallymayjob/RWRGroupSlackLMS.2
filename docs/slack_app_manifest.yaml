@@ -1,0 +1,90 @@
+display_information:
+  name: RWR Slack LMS
+  description: Slack-native LMS and onboarding bot powered by Apps Script + Sheets + Gemini
+  background_color: "#1F2937"
+
+features:
+  bot_user:
+    display_name: RWR LMS Bot
+    always_online: false
+  slash_commands:
+    - command: /learn
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: View learning options and next actions
+      usage_hint: ""
+      should_escape: false
+    - command: /progress
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: View your training progress
+      usage_hint: ""
+      should_escape: false
+    - command: /lesson
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: View your current lesson
+      usage_hint: ""
+      should_escape: false
+    - command: /complete
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: Mark lesson complete
+      usage_hint: "lesson-id"
+      should_escape: false
+    - command: /onboard
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: Onboard a learner (admin)
+      usage_hint: "@user"
+      should_escape: false
+    - command: /admin
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: Open admin controls
+      usage_hint: ""
+      should_escape: false
+    - command: /cohort
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: Cohort-level actions
+      usage_hint: ""
+      should_escape: false
+    - command: /resend
+      url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+      description: Resend a lesson (admin)
+      usage_hint: "@user LESSON_ID"
+      should_escape: false
+  shortcuts:
+    - name: Enroll learner
+      type: global
+      callback_id: shortcut_enroll_learner
+      description: Add a learner enrollment
+    - name: Pause/resume learner
+      type: global
+      callback_id: shortcut_pause_resume
+      description: Pause or resume enrollment
+    - name: Create lesson from message
+      type: message
+      callback_id: shortcut_create_lesson_from_message
+      description: Seed content pipeline from a message
+
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+      - chat:write.public
+      - commands
+      - im:write
+      - users:read
+      - users:read.email
+      - channels:read
+      - groups:read
+
+settings:
+  event_subscriptions:
+    request_url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+    bot_events:
+      - app_home_opened
+      - app_mention
+      - message.channels
+      - message.im
+  interactivity:
+    is_enabled: true
+    request_url: https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
