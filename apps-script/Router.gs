@@ -1,6 +1,15 @@
 function routeSlackRequest(e, correlationId) {
   var rawBody = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
   var contentType = (e && e.postData && e.postData.type) ? e.postData.type : '';
+  var requestType = detectRequestType_(rawBody, contentType);
+  var requestHash = computeRequestHash(rawBody);
+
+  if (isDuplicateRequest(requestType, requestHash)) {
+    logAudit('duplicate_request_ignored', 'system', 'router', requestType, requestHash, {}, correlationId);
+    return ackJson({ ok: true });
+  }
+
+  markRequestSeen(requestType, requestHash, correlationId);
 
   if (contentType.indexOf('application/json') >= 0) {
     var jsonBody = safeJsonParse(rawBody, {});
@@ -24,6 +33,23 @@ function routeSlackRequest(e, correlationId) {
 
   logError('unknown_payload', 'Unsupported Slack payload', { contentType: contentType, rawBody: rawBody }, correlationId);
   return ackJson({ ok: true });
+}
+
+function detectRequestType_(rawBody, contentType) {
+  if (contentType.indexOf('application/json') >= 0) {
+    var body = safeJsonParse(rawBody, {});
+    return body.type || 'json_unknown';
+  }
+
+  var params = parseQueryString_(rawBody);
+  if (params.command) {
+    return 'slash_command';
+  }
+  if (params.payload) {
+    return 'interactive';
+  }
+
+  return 'unknown';
 }
 
 function parseQueryString_(body) {

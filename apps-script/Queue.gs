@@ -41,6 +41,9 @@ function getReadyQueueRows_(limit) {
     .filter(function (row) {
       return row.Status === QUEUE_STATUS.PENDING && new Date(row.NotBefore) <= now;
     })
+    .sort(function (a, b) {
+      return Number(a.Priority || 5) - Number(b.Priority || 5);
+    })
     .slice(0, limit);
 }
 
@@ -55,7 +58,7 @@ function claimJob_(jobId) {
 
 function runQueueJob_(job) {
   try {
-    // Placeholder for job handlers.
+    dispatchQueueJob_(job);
     updateRowById(TAB_NAMES.QUEUE, 'JobID', job.JobID, {
       Status: QUEUE_STATUS.DONE,
       UpdatedAt: nowIso()
@@ -63,6 +66,30 @@ function runQueueJob_(job) {
     logAudit('queue_job_done', 'system', 'queue', job.EntityType, job.EntityID, { jobType: job.JobType }, job.JobID);
   } catch (err) {
     handleQueueFailure_(job, err);
+  }
+}
+
+function dispatchQueueJob_(job) {
+  var payload = safeJsonParse(job.PayloadJSON || '{}', {});
+
+  switch (job.JobType) {
+    case 'NOOP':
+      return;
+    case 'SEND_PROGRESS_SNAPSHOT':
+      handleSendProgressSnapshotJob_(job, payload);
+      return;
+    default:
+      throw new Error('No queue handler registered for JobType=' + job.JobType);
+  }
+}
+
+function handleSendProgressSnapshotJob_(job, payload) {
+  if (!payload.channel || !payload.text) {
+    throw new Error('SEND_PROGRESS_SNAPSHOT missing channel/text');
+  }
+  var response = postSlackMessage(payload.channel, payload.text, payload.blocks || []);
+  if (!response.ok) {
+    throw new Error('Slack API error: ' + (response.error || 'unknown'));
   }
 }
 

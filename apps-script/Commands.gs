@@ -22,19 +22,22 @@ function handleProgressCommand_(payload, correlationId) {
   }
 
   var user = users[0];
-  var enrollments = findRows(TAB_NAMES.ENROLLMENTS, { UserID: user.UserID });
-  if (!enrollments.length) {
+  var activeEnrollments = findRows(TAB_NAMES.ENROLLMENTS, {
+    UserID: user.UserID,
+    EnrollmentStatus: 'active'
+  });
+  if (!activeEnrollments.length) {
     return ackJson({
       response_type: 'ephemeral',
       text: 'No active enrollments found for your profile.'
     });
   }
 
-  var enrollment = enrollments[0];
+  var enrollment = activeEnrollments[0];
   var rows = findRows(TAB_NAMES.PROGRESS, { EnrollmentID: enrollment.EnrollmentID });
   var completed = rows.filter(function (r) { return r.Status === 'completed'; }).length;
   var overdue = rows.filter(function (r) { return String(r.IsOverdue) === 'true' || r.Status === 'overdue'; }).length;
-  var remaining = rows.length - completed;
+  var remaining = Math.max(rows.length - completed, 0);
 
   logAudit('progress_viewed', 'learner', user.UserID, 'enrollment', enrollment.EnrollmentID, {
     completed: completed,

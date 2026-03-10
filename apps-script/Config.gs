@@ -6,7 +6,8 @@ var TAB_NAMES = {
   QUEUE: 'Queue',
   AUDIT_LOG: 'Audit_Log',
   ERROR_LOG: 'Error_Log',
-  SETTINGS: 'Settings'
+  SETTINGS: 'Settings',
+  REQUEST_LOG: 'Request_Log'
 };
 
 var HEADERS = {};
@@ -34,25 +35,29 @@ HEADERS[TAB_NAMES.ERROR_LOG] = [
 HEADERS[TAB_NAMES.SETTINGS] = [
   'SettingKey', 'SettingValue', 'ValueType', 'Scope', 'IsActive', 'UpdatedBy', 'UpdatedAt'
 ];
+HEADERS[TAB_NAMES.REQUEST_LOG] = [
+  'RequestID', 'RequestType', 'RequestHash', 'Status', 'CorrelationID', 'CreatedAt'
+];
 
 var QUEUE_STATUS = {
   PENDING: 'pending',
   PROCESSING: 'processing',
   DONE: 'done',
-  FAILED: 'failed',
   FAILED_PERMANENT: 'failed_permanent'
 };
 
 var DEFAULTS = {
   MAX_RETRIES: 5,
   BASE_BACKOFF_SECONDS: 30,
-  SLACK_REPLAY_WINDOW_SECONDS: 300
+  SLACK_REPLAY_WINDOW_SECONDS: 300,
+  DUPLICATE_CACHE_SECONDS: 600
 };
 
 function getRuntimeConfig() {
   return {
     maxRetries: Number(getSetting('MAX_RETRIES', DEFAULTS.MAX_RETRIES)),
     baseBackoffSeconds: Number(getSetting('BASE_BACKOFF_SECONDS', DEFAULTS.BASE_BACKOFF_SECONDS)),
-    replayWindowSeconds: Number(getSetting('SLACK_REPLAY_WINDOW_SECONDS', DEFAULTS.SLACK_REPLAY_WINDOW_SECONDS))
+    replayWindowSeconds: Number(getSetting('SLACK_REPLAY_WINDOW_SECONDS', DEFAULTS.SLACK_REPLAY_WINDOW_SECONDS)),
+    duplicateCacheSeconds: Number(getSetting('DUPLICATE_CACHE_SECONDS', DEFAULTS.DUPLICATE_CACHE_SECONDS))
   };
 }
