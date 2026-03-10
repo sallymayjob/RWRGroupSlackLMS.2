@@ -37,7 +37,7 @@ HEADERS[TAB_NAMES.SETTINGS] = [
   'SettingKey', 'SettingValue', 'ValueType', 'Scope', 'IsActive', 'UpdatedBy', 'UpdatedAt'
 ];
 HEADERS[TAB_NAMES.REQUEST_LOG] = [
-  'RequestID', 'RequestType', 'RequestHash', 'Status', 'CorrelationID', 'CreatedAt'
+  'RequestID', 'RequestType', 'RequestHash', 'Status', 'AttemptCount', 'CorrelationID', 'LastError', 'LastSeenAt', 'CreatedAt'
 ];
 HEADERS[TAB_NAMES.GEMINI_JOBS] = [
   'GeminiJobID', 'OperationName', 'LessonID', 'SourceText', 'Status', 'ResultJSON', 'Error', 'CreatedAt', 'UpdatedAt'
@@ -56,7 +56,9 @@ var DEFAULTS = {
   SLACK_REPLAY_WINDOW_SECONDS: 300,
   DUPLICATE_CACHE_SECONDS: 600,
   GEMINI_MODEL: 'gemini-2.0-flash',
-  GEMINI_API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta'
+  GEMINI_API_BASE_URL: 'https://generativelanguage.googleapis.com/v1beta',
+  GEMINI_MAX_POLL_ATTEMPTS: 20,
+  GEMINI_POLL_INTERVAL_SECONDS: 30
 };
 
 function getRuntimeConfig() {
@@ -66,6 +68,8 @@ function getRuntimeConfig() {
     replayWindowSeconds: Number(getSetting('SLACK_REPLAY_WINDOW_SECONDS', DEFAULTS.SLACK_REPLAY_WINDOW_SECONDS)),
     duplicateCacheSeconds: Number(getSetting('DUPLICATE_CACHE_SECONDS', DEFAULTS.DUPLICATE_CACHE_SECONDS)),
     geminiModel: getSetting('GEMINI_MODEL', DEFAULTS.GEMINI_MODEL),
-    geminiApiBaseUrl: getSetting('GEMINI_API_BASE_URL', DEFAULTS.GEMINI_API_BASE_URL)
+    geminiApiBaseUrl: getSetting('GEMINI_API_BASE_URL', DEFAULTS.GEMINI_API_BASE_URL),
+    geminiMaxPollAttempts: Number(getSetting('GEMINI_MAX_POLL_ATTEMPTS', DEFAULTS.GEMINI_MAX_POLL_ATTEMPTS)),
+    geminiPollIntervalSeconds: Number(getSetting('GEMINI_POLL_INTERVAL_SECONDS', DEFAULTS.GEMINI_POLL_INTERVAL_SECONDS))
   };
 }

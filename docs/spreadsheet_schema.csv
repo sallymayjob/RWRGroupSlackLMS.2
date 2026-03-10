@@ -83,8 +83,11 @@ Request_Log,1,RequestID
 Request_Log,2,RequestType
 Request_Log,3,RequestHash
 Request_Log,4,Status
-Request_Log,5,CorrelationID
-Request_Log,6,CreatedAt
+Request_Log,5,AttemptCount
+Request_Log,6,CorrelationID
+Request_Log,7,LastError
+Request_Log,8,LastSeenAt
+Request_Log,9,CreatedAt
 Gemini_Jobs,1,GeminiJobID
 Gemini_Jobs,2,OperationName
 Gemini_Jobs,3,LessonID

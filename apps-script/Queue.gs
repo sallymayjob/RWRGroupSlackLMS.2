@@ -22,14 +22,21 @@ function enqueue(jobType, entityType, entityId, payload, opts) {
 
 function processNextBatch(limit) {
   var maxItems = limit || 10;
+  var claimedJobs = claimReadyQueueRows_(maxItems);
+  claimedJobs.forEach(function (job) {
+    runQueueJob_(job);
+  });
+}
+
+function claimReadyQueueRows_(limit) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var ready = getReadyQueueRows_(maxItems);
+    var ready = getReadyQueueRows_(limit);
     ready.forEach(function (job) {
       claimJob_(job.JobID);
-      runQueueJob_(job);
     });
+    return ready;
   } finally {
     lock.releaseLock();
   }
@@ -120,7 +127,8 @@ function handleGeminiSubmitBrandReview_(payload) {
   enqueue('GEMINI_POLL_OPERATION', 'gemini_operation', operation.name, {
     operationName: operation.name,
     lessonId: payload.lessonId,
-    channel: payload.channel || ''
+    channel: payload.channel || '',
+    pollAttempt: 0
   }, {
     priority: 5,
     notBefore: new Date(Date.now() + 15000).toISOString()
@@ -132,11 +140,28 @@ function handleGeminiPollOperation_(payload) {
     throw new Error('GEMINI_POLL_OPERATION missing operationName/lessonId');
   }
 
+  var cfg = getRuntimeConfig();
+  var pollAttempt = Number(payload.pollAttempt || 0);
+  if (pollAttempt >= cfg.geminiMaxPollAttempts) {
+    recordGeminiJobResult_(payload.operationName, 'failed', null, 'max_poll_attempts_exceeded');
+    logError('gemini_poll_timeout', 'Gemini operation did not complete before max poll attempts', {
+      operationName: payload.operationName,
+      lessonId: payload.lessonId,
+      pollAttempt: pollAttempt
+    }, payload.operationName);
+    return;
+  }
+
   var operationBody = getGeminiOperation_(payload.operationName);
   if (!operationBody.done) {
-    enqueue('GEMINI_POLL_OPERATION', 'gemini_operation', payload.operationName, payload, {
+    enqueue('GEMINI_POLL_OPERATION', 'gemini_operation', payload.operationName, {
+      operationName: payload.operationName,
+      lessonId: payload.lessonId,
+      channel: payload.channel || '',
+      pollAttempt: pollAttempt + 1
+    }, {
       priority: 5,
-      notBefore: new Date(Date.now() + 30000).toISOString()
+      notBefore: new Date(Date.now() + (cfg.geminiPollIntervalSeconds * 1000)).toISOString()
     });
     return;
   }

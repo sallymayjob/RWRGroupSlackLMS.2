@@ -4,35 +4,46 @@ function routeSlackRequest(e, correlationId) {
   var requestType = detectRequestType_(rawBody, contentType);
   var requestHash = computeRequestHash(rawBody);
 
-  if (isDuplicateRequest(requestType, requestHash)) {
+  if (isProcessedRequest(requestType, requestHash)) {
     logAudit('duplicate_request_ignored', 'system', 'router', requestType, requestHash, {}, correlationId);
     return ackJson({ ok: true });
   }
 
-  markRequestSeen(requestType, requestHash, correlationId);
+  beginRequestProcessing(requestType, requestHash, correlationId);
 
-  if (contentType.indexOf('application/json') >= 0) {
-    var jsonBody = safeJsonParse(rawBody, {});
-    if (jsonBody.type === 'url_verification') {
-      return ackJson({ challenge: jsonBody.challenge });
+  try {
+    var response;
+
+    if (contentType.indexOf('application/json') >= 0) {
+      var jsonBody = safeJsonParse(rawBody, {});
+      if (jsonBody.type === 'url_verification') {
+        response = ackJson({ challenge: jsonBody.challenge });
+      } else if (jsonBody.type === 'event_callback') {
+        response = handleSlackEvent(jsonBody, correlationId);
+      }
     }
-    if (jsonBody.type === 'event_callback') {
-      return handleSlackEvent(jsonBody, correlationId);
+
+    if (!response) {
+      var params = parseQueryString_(rawBody);
+      if (params.payload) {
+        var interactive = safeJsonParse(params.payload, {});
+        response = handleInteractive(interactive, correlationId);
+      } else if (params.command) {
+        response = handleSlashCommand(params, correlationId);
+      }
     }
-  }
 
-  var params = parseQueryString_(rawBody);
-  if (params.payload) {
-    var interactive = safeJsonParse(params.payload, {});
-    return handleInteractive(interactive, correlationId);
-  }
+    if (!response) {
+      logError('unknown_payload', 'Unsupported Slack payload', { contentType: contentType, rawBody: rawBody }, correlationId);
+      response = ackJson({ ok: true });
+    }
 
-  if (params.command) {
-    return handleSlashCommand(params, correlationId);
+    markRequestProcessed(requestType, requestHash, correlationId);
+    return response;
+  } catch (err) {
+    markRequestFailed(requestType, requestHash, correlationId, String(err));
+    throw err;
   }
-
-  logError('unknown_payload', 'Unsupported Slack payload', { contentType: contentType, rawBody: rawBody }, correlationId);
-  return ackJson({ ok: true });
 }
 
 function detectRequestType_(rawBody, contentType) {

@@ -1,5 +1,5 @@
 function getGeminiApiKey_() {
-  var key = getScriptProperty('GEMINI_API_KEY');
+  var key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!key) {
     throw new Error('Missing GEMINI_API_KEY');
   }

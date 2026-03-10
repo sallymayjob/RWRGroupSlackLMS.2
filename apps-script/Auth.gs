@@ -14,7 +14,7 @@ function verifySlackRequest(e) {
     return { ok: false, reason: 'stale_timestamp' };
   }
 
-  var secret = getScriptProperty('SLACK_SIGNING_SECRET');
+  var secret = PropertiesService.getScriptProperties().getProperty('SLACK_SIGNING_SECRET');
   if (!secret) {
     return { ok: false, reason: 'missing_signing_secret' };
   }

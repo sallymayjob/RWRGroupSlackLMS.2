@@ -1,5 +1,5 @@
 function postSlackMessage(channel, text, blocks) {
-  var token = getScriptProperty('SLACK_BOT_TOKEN');
+  var token = PropertiesService.getScriptProperties().getProperty('SLACK_BOT_TOKEN');
   if (!token) {
     throw new Error('Missing SLACK_BOT_TOKEN');
   }
