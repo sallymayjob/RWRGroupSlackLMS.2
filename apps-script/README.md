@@ -10,7 +10,7 @@ This folder contains the initial implementation skeleton for the Slack LMS backe
 
 ## Setup
 1. Create a standalone Apps Script project bound to the LMS spreadsheet.
-2. Add all `.gs` files from this folder.
+2. Add all `.gs` files from this folder (including `CommandJobs.gs`).
 3. Set Script Properties:
    - `SLACK_BOT_TOKEN`
    - `SLACK_SIGNING_SECRET`
@@ -22,10 +22,13 @@ This folder contains the initial implementation skeleton for the Slack LMS backe
 ## Current coverage
 - Slack signature verification and replay-window protection.
 - Payload routing for slash commands, events, and interactivity.
+- Slash commands are fast-ACKed with queued background processing for heavier admin operations.
+- Interactivity handler now supports block actions, shortcuts, and modal submissions (basic modal clear response).
 - Duplicate request suppression with hash + cache + request log.
 - `/progress` command.
 - `mark_complete` action handler (idempotent completion update).
 - Queue primitives with retries, dead-letter status, and typed handlers.
+- Onboarding helper, lesson-delivery scheduler, and reminder scheduler modules.
 - Async Gemini Batch flow (`GEMINI_SUBMIT_BRAND_REVIEW` -> `GEMINI_POLL_OPERATION`).
 - Structured Gemini JSON output enforcement via `response_schema`.
 - Deterministic brand compliance scoring in application code (`BrandScoring.gs`).
@@ -34,3 +37,9 @@ This folder contains the initial implementation skeleton for the Slack LMS backe
 
 ## Beginner setup guide
 For a click-by-click non-technical setup guide, see `docs/deployment.md`.
+
+
+## Recommended triggers
+- `runQueueWorker`: every minute
+- `runDailyReleaseScheduler`: hourly
+- `runReminderScheduler`: hourly

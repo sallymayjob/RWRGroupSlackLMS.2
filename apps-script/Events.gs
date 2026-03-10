@@ -2,7 +2,15 @@ function handleSlackEvent(body, correlationId) {
   var eventType = body && body.event ? body.event.type : 'unknown';
   logAudit('event_received', 'slack', body.team_id || '', 'event', eventType, { eventId: body.event_id }, correlationId);
 
-  if (eventType === 'message' && shouldRunBrandAgent_(body.event)) {
+  if (eventType !== 'message') {
+    return ackJson({ ok: true });
+  }
+
+  if (shouldIgnoreMessageEvent_(body.event)) {
+    return ackJson({ ok: true });
+  }
+
+  if (shouldRunBrandAgent_(body.event)) {
     enqueue('GEMINI_SUBMIT_BRAND_REVIEW', 'message', body.event.client_msg_id || body.event.ts, {
       lessonId: body.event.client_msg_id || body.event.ts,
       sourceText: body.event.text || '',
@@ -15,6 +23,22 @@ function handleSlackEvent(body, correlationId) {
   }
 
   return ackJson({ ok: true });
+}
+
+function shouldIgnoreMessageEvent_(eventPayload) {
+  if (!eventPayload) {
+    return true;
+  }
+
+  if (eventPayload.subtype) {
+    return true;
+  }
+
+  if (eventPayload.bot_id) {
+    return true;
+  }
+
+  return false;
 }
 
 function shouldRunBrandAgent_(eventPayload) {

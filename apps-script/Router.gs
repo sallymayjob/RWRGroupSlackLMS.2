@@ -1,15 +1,21 @@
 function routeSlackRequest(e, correlationId) {
   var rawBody = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
   var contentType = (e && e.postData && e.postData.type) ? e.postData.type : '';
+  var headers = normalizeHeaders_(e && e.headers ? e.headers : {});
   var requestType = detectRequestType_(rawBody, contentType);
   var requestHash = computeRequestHash(rawBody);
 
-  if (isProcessedRequest(requestType, requestHash)) {
+  if (headers['x-slack-retry-num']) {
+    logAudit('slack_retry_received', 'slack', headers['x-slack-retry-num'], 'request', requestType, {
+      reason: headers['x-slack-retry-reason'] || ''
+    }, correlationId);
+  }
+
+  var claim = claimRequestForProcessing(requestType, requestHash, correlationId);
+  if (claim.duplicate) {
     logAudit('duplicate_request_ignored', 'system', 'router', requestType, requestHash, {}, correlationId);
     return ackJson({ ok: true });
   }
-
-  beginRequestProcessing(requestType, requestHash, correlationId);
 
   try {
     var response;

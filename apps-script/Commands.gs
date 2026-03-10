@@ -3,45 +3,108 @@ function handleSlashCommand(payload, correlationId) {
     case '/progress':
       return handleProgressCommand_(payload, correlationId);
     case '/onboard':
-    case '/admin':
-    case '/cohort':
+      return handleOnboardCommand_(payload, correlationId);
     case '/resend':
-      return handleAdminCommandStub_(payload, correlationId);
+      return handleResendCommand_(payload, correlationId);
+    case '/admin':
+      return handleAdminCommand_(payload, correlationId);
     case '/learn':
     case '/lesson':
+      return handleLessonCommand_(payload, correlationId);
     case '/complete':
-      return ackJson({
-        response_type: 'ephemeral',
-        text: 'Command is recognized but not implemented yet: ' + payload.command
-      });
+      return handleCompleteCommand_(payload, correlationId);
+    case '/cohort':
+      return handleCohortCommand_(payload, correlationId);
     default:
-      return ackJson({
-        response_type: 'ephemeral',
-        text: 'Command not yet implemented: ' + payload.command
-      });
+      return ackJson({ response_type: 'ephemeral', text: 'Command not implemented: ' + payload.command });
   }
 }
 
-function handleAdminCommandStub_(payload, correlationId) {
+function handleOnboardCommand_(payload, correlationId) {
   var auth = requireAdmin_(payload.user_id);
   if (!auth.ok) {
-    logAudit('admin_command_denied', 'slack_user', payload.user_id, 'command', payload.command, {
-      reason: auth.reason
-    }, correlationId);
-    return ackJson({
-      response_type: 'ephemeral',
-      text: 'You are not authorized to use ' + payload.command + '.'
-    });
+    return ackJson({ response_type: 'ephemeral', text: 'You are not authorized to onboard learners.' });
   }
 
-  logAudit('admin_command_invoked', 'admin', auth.user.UserID, 'command', payload.command, {
-    text: payload.text || ''
-  }, correlationId);
+  enqueue('PROCESS_ONBOARD_COMMAND', 'slash_command', payload.user_id, {
+    actorSlackUserId: payload.user_id,
+    text: payload.text || '',
+    responseUrl: payload.response_url || '',
+    correlationId: correlationId
+  }, { priority: 4 });
 
-  return ackJson({
-    response_type: 'ephemeral',
-    text: payload.command + ' is authorized but not implemented yet.'
-  });
+  return ackJson({ response_type: 'ephemeral', text: 'Onboarding request queued.' });
+}
+
+function handleResendCommand_(payload, correlationId) {
+  var auth = requireAdmin_(payload.user_id);
+  if (!auth.ok) {
+    return ackJson({ response_type: 'ephemeral', text: 'You are not authorized to resend lessons.' });
+  }
+
+  enqueue('PROCESS_RESEND_COMMAND', 'slash_command', payload.user_id, {
+    actorSlackUserId: payload.user_id,
+    text: payload.text || '',
+    responseUrl: payload.response_url || '',
+    correlationId: correlationId
+  }, { priority: 4 });
+
+  return ackJson({ response_type: 'ephemeral', text: 'Resend request queued.' });
+}
+
+function handleAdminCommand_(payload, correlationId) {
+  var auth = requireAdmin_(payload.user_id);
+  if (!auth.ok) {
+    return ackJson({ response_type: 'ephemeral', text: 'You are not authorized to use /admin.' });
+  }
+
+  enqueue('PROCESS_ADMIN_COMMAND', 'slash_command', payload.user_id, {
+    actorSlackUserId: payload.user_id,
+    text: payload.text || '',
+    responseUrl: payload.response_url || '',
+    correlationId: correlationId
+  }, { priority: 4 });
+
+  return ackJson({ response_type: 'ephemeral', text: 'Admin command queued.' });
+}
+
+function handleLessonCommand_(payload, correlationId) {
+  var user = getUserBySlackId_(payload.user_id);
+  if (!user) {
+    return ackJson({ response_type: 'ephemeral', text: 'User not found in LMS.' });
+  }
+  var enrollments = findRows(TAB_NAMES.ENROLLMENTS, { UserID: user.UserID, EnrollmentStatus: 'active' });
+  if (!enrollments.length) {
+    return ackJson({ response_type: 'ephemeral', text: 'No active enrollment.' });
+  }
+  var next = getNextEligibleProgress_(enrollments[0].EnrollmentID);
+  if (!next) {
+    return ackJson({ response_type: 'ephemeral', text: 'No lesson due right now.' });
+  }
+  var lessonRows = findRows(TAB_NAMES.LESSONS, { LessonID: next.LessonID });
+  var title = lessonRows.length ? lessonRows[0].Title : next.LessonID;
+
+  logAudit('lesson_lookup', 'learner', user.UserID, 'lesson', next.LessonID, {}, correlationId);
+  return ackJson({ response_type: 'ephemeral', text: 'Next lesson: ' + title + ' (' + next.LessonID + ')' });
+}
+
+function handleCompleteCommand_(payload, correlationId) {
+  enqueue('PROCESS_COMPLETE_COMMAND', 'slash_command', payload.user_id, {
+    actorSlackUserId: payload.user_id,
+    text: payload.text || '',
+    responseUrl: payload.response_url || '',
+    correlationId: correlationId
+  }, { priority: 4 });
+
+  return ackJson({ response_type: 'ephemeral', text: 'Completion request queued.' });
+}
+
+function handleCohortCommand_(payload, correlationId) {
+  var auth = requireAdmin_(payload.user_id);
+  if (!auth.ok) {
+    return ackJson({ response_type: 'ephemeral', text: 'You are not authorized to use /cohort.' });
+  }
+  return ackJson({ response_type: 'ephemeral', text: '/cohort workflow queued for future expansion.' });
 }
 
 function handleProgressCommand_(payload, correlationId) {

@@ -24,4 +24,5 @@ function runQueueWorker() {
 
 function setupSheets() {
   bootstrapSchema();
+  seedSchemaMetadata();
 }

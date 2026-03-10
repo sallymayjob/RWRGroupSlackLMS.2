@@ -31,7 +31,7 @@ If you are non-technical: this is a **plug-and-play starter kit** for running on
 
 ## Where the important files are
 - `docs/slack_app_manifest.yaml` → Slack app setup template.
-- `docs/spreadsheet_schema.csv` → all spreadsheet tabs + columns.
+- `docs/spreadsheet_schema.csv` → all spreadsheet tabs + columns (import/reference template).
 - `docs/deployment.md` → full setup checklist.
 - `apps-script/` → backend script files to paste/import into Apps Script.
 

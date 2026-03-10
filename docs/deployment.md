@@ -11,6 +11,15 @@ By the end, you will have:
 
 ---
 
+## Quick-start sheet setup (binary-free)
+To avoid binary template issues, build the workbook directly in Google Sheets:
+1. Create a new blank Google Sheet in Drive.
+2. Bind Apps Script to that sheet and add the `apps-script/*.gs` files.
+3. Run `setupSheets()` to generate all tabs/headers automatically.
+4. Use `docs/spreadsheet_schema.csv` as your template/checklist for validation.
+
+---
+
 ## 1) Create the Google Sheet (database)
 1. Open Google Sheets and create a new spreadsheet.
 2. Name it something like: `RWR Slack LMS`.
@@ -90,7 +99,15 @@ This system does slow work in background jobs.
    - Function: `runQueueWorker`
    - Event source: Time-driven
    - Type: Every minute (or every 5 minutes to start)
-3. Save.
+3. Add trigger:
+   - Function: `runDailyReleaseScheduler`
+   - Event source: Time-driven
+   - Type: Hour timer
+4. Add trigger:
+   - Function: `runReminderScheduler`
+   - Event source: Time-driven
+   - Type: Hour timer
+5. Save.
 
 ---
 

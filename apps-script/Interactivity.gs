@@ -1,4 +1,24 @@
 function handleInteractive(payload, correlationId) {
+  var type = payload.type || '';
+
+  if (type === 'block_actions') {
+    return handleBlockActions_(payload, correlationId);
+  }
+
+  if (type === 'shortcut' || type === 'message_action') {
+    logAudit('shortcut_received', 'slack_user', payload.user && payload.user.id, 'shortcut', payload.callback_id || '', {}, correlationId);
+    return ackJson({ text: 'Shortcut received. Modal workflows are not yet fully implemented.' });
+  }
+
+  if (type === 'view_submission') {
+    logAudit('modal_submission_received', 'slack_user', payload.user && payload.user.id, 'modal', payload.view && payload.view.callback_id, {}, correlationId);
+    return ackJson({ response_action: 'clear' });
+  }
+
+  return ackJson({ text: 'Unsupported interactivity type: ' + type });
+}
+
+function handleBlockActions_(payload, correlationId) {
   var action = (payload.actions && payload.actions[0]) ? payload.actions[0] : null;
   if (!action) {
     return ackJson({ text: 'No interactive action supplied.' });
@@ -24,6 +44,13 @@ function handleMarkCompleteAction_(payload, action, correlationId) {
   }
 
   var row = rows[0];
+
+  var actingSlackUser = payload.user && payload.user.id ? payload.user.id : '';
+  var progressUser = findRows(TAB_NAMES.USERS, { UserID: row.UserID, IsActive: true });
+  if (!progressUser.length || progressUser[0].SlackUserID !== actingSlackUser) {
+    return ackJson({ text: 'You are not allowed to complete this lesson.' });
+  }
+
   if (row.Status === 'completed') {
     return ackJson({ text: 'This lesson is already completed ✅' });
   }

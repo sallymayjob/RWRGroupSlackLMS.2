@@ -34,6 +34,7 @@ function bootstrapSchema() {
 }
 
 function appendRow(tabName, rowObject) {
+  validateRowForTab_(tabName, rowObject);
   var sheet = getSheet(tabName);
   var headers = HEADERS[tabName];
   if (!headers) {
@@ -65,6 +66,7 @@ function findRows(tabName, criteria) {
 }
 
 function updateRowById(tabName, idField, idValue, updates) {
+  validateRowForTab_(tabName, updates);
   var sheet = getSheet(tabName);
   var rows = getAllRows(tabName);
   var target = rows.filter(function (row) {

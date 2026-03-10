@@ -1,11 +1,18 @@
 function enqueue(jobType, entityType, entityId, payload, opts) {
   var options = opts || {};
   var cfg = getRuntimeConfig();
+  var idempotencyKey = options.idempotencyKey || '';
+
+  if (idempotencyKey && hasLiveQueueJob_(idempotencyKey)) {
+    return;
+  }
+
   appendRow(TAB_NAMES.QUEUE, {
     JobID: generateId('JOB'),
     JobType: jobType,
     EntityType: entityType || '',
     EntityID: entityId || '',
+    IdempotencyKey: idempotencyKey,
     PayloadJSON: JSON.stringify(payload || {}),
     Status: QUEUE_STATUS.PENDING,
     Priority: options.priority || 5,
@@ -15,8 +22,19 @@ function enqueue(jobType, entityType, entityId, payload, opts) {
     LockedBy: '',
     LockedAt: '',
     LastError: '',
+    FirstAttemptAt: '',
+    CompletedAt: '',
+    NextRetryAt: '',
+    RetryReason: '',
     CreatedAt: nowIso(),
     UpdatedAt: nowIso()
+  });
+}
+
+function hasLiveQueueJob_(idempotencyKey) {
+  var rows = findRows(TAB_NAMES.QUEUE, { IdempotencyKey: idempotencyKey });
+  return rows.some(function (r) {
+    return r.Status === QUEUE_STATUS.PENDING || r.Status === QUEUE_STATUS.PROCESSING;
   });
 }
 
@@ -32,6 +50,7 @@ function claimReadyQueueRows_(limit) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
+    reclaimStaleProcessingJobs_();
     var ready = getReadyQueueRows_(limit);
     ready.forEach(function (job) {
       claimJob_(job.JobID);
@@ -40,6 +59,25 @@ function claimReadyQueueRows_(limit) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function reclaimStaleProcessingJobs_() {
+  var staleBefore = new Date(Date.now() - (10 * 60 * 1000));
+  var rows = getAllRows(TAB_NAMES.QUEUE).filter(function (row) {
+    return row.Status === QUEUE_STATUS.PROCESSING && row.LockedAt && new Date(row.LockedAt) < staleBefore;
+  });
+
+  rows.forEach(function (row) {
+    updateRowById(TAB_NAMES.QUEUE, 'JobID', row.JobID, {
+      Status: QUEUE_STATUS.PENDING,
+      LockedBy: '',
+      LockedAt: '',
+      LastError: 'stale_lock_recovered',
+      RetryReason: 'stale_lock_recovered',
+      UpdatedAt: nowIso()
+    });
+    logError('queue_stale_lock_recovered', 'Recovered stale queue lock', { jobId: row.JobID }, row.JobID);
+  });
 }
 
 function getReadyQueueRows_(limit) {
@@ -59,15 +97,27 @@ function claimJob_(jobId) {
     Status: QUEUE_STATUS.PROCESSING,
     LockedBy: Session.getTemporaryActiveUserKey() || 'worker',
     LockedAt: nowIso(),
+    NextRetryAt: '',
+    RetryReason: '',
     UpdatedAt: nowIso()
   });
 }
 
 function runQueueJob_(job) {
+  if (!job.FirstAttemptAt) {
+    updateRowById(TAB_NAMES.QUEUE, 'JobID', job.JobID, {
+      FirstAttemptAt: nowIso(),
+      UpdatedAt: nowIso()
+    });
+  }
+
   try {
     dispatchQueueJob_(job);
     updateRowById(TAB_NAMES.QUEUE, 'JobID', job.JobID, {
       Status: QUEUE_STATUS.DONE,
+      CompletedAt: nowIso(),
+      NextRetryAt: '',
+      RetryReason: '',
       UpdatedAt: nowIso()
     });
     logAudit('queue_job_done', 'system', 'queue', job.EntityType, job.EntityID, { jobType: job.JobType }, job.JobID);
@@ -84,6 +134,24 @@ function dispatchQueueJob_(job) {
       return;
     case 'SEND_PROGRESS_SNAPSHOT':
       handleSendProgressSnapshotJob_(payload);
+      return;
+    case 'SEND_LESSON':
+      sendLessonDelivery_(payload);
+      return;
+    case 'SEND_REMINDER':
+      sendReminder_(payload);
+      return;
+    case 'PROCESS_ONBOARD_COMMAND':
+      processOnboardCommandJob_(payload);
+      return;
+    case 'PROCESS_RESEND_COMMAND':
+      processResendCommandJob_(payload);
+      return;
+    case 'PROCESS_ADMIN_COMMAND':
+      processAdminCommandJob_(payload);
+      return;
+    case 'PROCESS_COMPLETE_COMMAND':
+      processCompleteCommandJob_(payload);
       return;
     case 'GEMINI_SUBMIT_BRAND_REVIEW':
       handleGeminiSubmitBrandReview_(payload);
@@ -102,6 +170,9 @@ function handleSendProgressSnapshotJob_(payload) {
   }
   var response = postSlackMessage(payload.channel, payload.text, payload.blocks || []);
   if (!response.ok) {
+    if (response.retryable) {
+      throw new Error('SLACK_RETRYABLE:' + String(response.retryAfterSec || 0) + ':' + (response.error || 'unknown'));
+    }
     throw new Error('Slack API error: ' + (response.error || 'unknown'));
   }
 }
@@ -131,7 +202,8 @@ function handleGeminiSubmitBrandReview_(payload) {
     pollAttempt: 0
   }, {
     priority: 5,
-    notBefore: new Date(Date.now() + 15000).toISOString()
+    notBefore: new Date(Date.now() + 15000).toISOString(),
+    idempotencyKey: 'gemini_poll:' + operation.name + ':0'
   });
 }
 
@@ -161,7 +233,8 @@ function handleGeminiPollOperation_(payload) {
       pollAttempt: pollAttempt + 1
     }, {
       priority: 5,
-      notBefore: new Date(Date.now() + (cfg.geminiPollIntervalSeconds * 1000)).toISOString()
+      notBefore: new Date(Date.now() + (cfg.geminiPollIntervalSeconds * 1000)).toISOString(),
+      idempotencyKey: 'gemini_poll:' + payload.operationName + ':' + String(pollAttempt + 1)
     });
     return;
   }
@@ -189,7 +262,7 @@ function handleGeminiPollOperation_(payload) {
     enqueue('SEND_PROGRESS_SNAPSHOT', 'channel', payload.channel, {
       channel: payload.channel,
       text: 'Brand review complete for lesson `' + payload.lessonId + '`\nScore: *' + scoreResult.score + '*\nDeductions: ' + (scoreResult.deductions.join(', ') || 'none')
-    }, { priority: 6 });
+    }, { priority: 6, idempotencyKey: 'brand_review_notice:' + payload.operationName });
   }
 }
 
@@ -226,6 +299,7 @@ function handleQueueFailure_(job, err) {
       Status: QUEUE_STATUS.FAILED_PERMANENT,
       RetryCount: retry,
       LastError: String(err),
+      CompletedAt: nowIso(),
       UpdatedAt: nowIso()
     });
     logError('queue_failed_permanent', String(err), { jobId: job.JobID, jobType: job.JobType }, job.JobID);
@@ -234,6 +308,13 @@ function handleQueueFailure_(job, err) {
 
   var cfg = getRuntimeConfig();
   var delaySec = cfg.baseBackoffSeconds * Math.pow(2, retry - 1);
+  var m = String(err).match(/SLACK_RETRYABLE:(\d+):/);
+  if (m) {
+    var retryAfter = Number(m[1] || 0);
+    if (retryAfter > delaySec) {
+      delaySec = retryAfter;
+    }
+  }
   var next = new Date(Date.now() + delaySec * 1000).toISOString();
 
   updateRowById(TAB_NAMES.QUEUE, 'JobID', job.JobID, {
@@ -241,6 +322,9 @@ function handleQueueFailure_(job, err) {
     RetryCount: retry,
     NotBefore: next,
     LastError: String(err),
+    CompletedAt: '',
+    NextRetryAt: next,
+    RetryReason: String(err),
     LockedBy: '',
     LockedAt: '',
     UpdatedAt: nowIso()
