@@ -30,3 +30,7 @@ This folder contains the initial implementation skeleton for the Slack LMS backe
 - Structured Gemini JSON output enforcement via `response_schema`.
 - Deterministic brand compliance scoring in application code (`BrandScoring.gs`).
 - Structured `Audit_Log` and `Error_Log` writing.
+
+
+## Beginner setup guide
+For a click-by-click non-technical setup guide, see `docs/deployment.md`.
